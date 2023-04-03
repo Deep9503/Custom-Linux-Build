@@ -44,9 +44,7 @@ make -j $NUM_JOBS
 
 # Install glibc in the installation area, e.g. 'work/glibc/glibc_installed'.
 echo "Installing glibc."
-make install \
-  DESTDIR=$GLIBC_INSTALLED \
-  -j $NUM_JOBS
+make install -j $NUM_JOBS DESTDIR=$GLIBC_INSTALLED 
 
 cd $SRC_DIR
 
