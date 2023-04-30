@@ -22,5 +22,5 @@ predefined configuration files:
    particularly useful if you want to experiment with many non-default config
    options. In this case it's easier to use configuration file instead of using
    the scripts in order to generate tons of options. Another useful scenario is
-   when you distribute your OS based on 'Minimal Linux Live' and you want to use
+   when you distribute your OS based on 'Minimal Linux' and you want to use
    non-default kernel and/or Busybox options 'out of the box'.
