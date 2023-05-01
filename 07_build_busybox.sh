@@ -48,8 +48,7 @@ make busybox -j $NUM_JOBS
 
 # Create the symlinks for busybox. The file 'busybox.links' is used for this.
 echo "Generating Busybox based initramfs area."
-make CONFIG_PREFIX="$BUSYBOX_INSTALLED" \
-  install -j $NUM_JOBS
+make CONFIG_PREFIX="$BUSYBOX_INSTALLED" install -j $NUM_JOBS
 
 cd $SRC_DIR
 
