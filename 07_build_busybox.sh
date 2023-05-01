@@ -44,13 +44,11 @@ sed -i "s|.*CONFIG_EXTRA_CFLAGS.*|CONFIG_EXTRA_CFLAGS=\"$CFLAGS -L$SYSROOT/lib\"
 
 # Compile busybox with optimization for "parallel jobs" = "number of processors".
 echo "Building Busybox."
-make \
-  busybox -j $NUM_JOBS
+make busybox -j $NUM_JOBS
 
 # Create the symlinks for busybox. The file 'busybox.links' is used for this.
 echo "Generating Busybox based initramfs area."
-make \
-  CONFIG_PREFIX="$BUSYBOX_INSTALLED" \
+make CONFIG_PREFIX="$BUSYBOX_INSTALLED" \
   install -j $NUM_JOBS
 
 cd $SRC_DIR
