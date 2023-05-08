@@ -48,4 +48,4 @@ make install -j $NUM_JOBS DESTDIR=$GLIBC_INSTALLED
 
 cd $SRC_DIR
 
-echo "*** BUILD GLIBC END ***"
+echo "*** BUILD GLIBC END ***"jhvjhvjh
