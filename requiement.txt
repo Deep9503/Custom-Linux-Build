@@ -1,4 +1,9 @@
-sudo apt-get install make build-essential libncurses-dev bison flex libssl-dev libelf-dev
+make 
+build-essential 
+libncurses-dev 
+bison 
+flex 
+libssl-dev 
+libelf-dev 
 autoconf 
-
-apt install libtool
+libtool
