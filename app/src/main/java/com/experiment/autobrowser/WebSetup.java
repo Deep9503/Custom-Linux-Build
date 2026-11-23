@@ -47,6 +47,27 @@ final class WebSetup {
         web.getSettings().setUserAgentString(Prefs.desktopMode(c) ? Prefs.DESKTOP_UA : null);
     }
 
+    static final int SCROLL_PIXELS = 0;  // dx/dy in screen pixels
+    static final int SCROLL_SMOOTH = 1;  // screen pixels, animated
+    static final int SCROLL_PAGES = 2;   // dx/dy in screen-heights (0.8 of the view)
+
+    /**
+     * Scrolls whatever is scrollable under the middle of the view (a feed, a list, or the
+     * page itself), without touch events, so nothing gets clicked and no pull-to-refresh.
+     */
+    static String scrollJs(float dx, float dy, int mode) {
+        return "(function(dx,dy,m){var d=window.devicePixelRatio||1;"
+                + "if(m===2){dx=dx*innerWidth*0.8;dy=dy*innerHeight*0.8;}else{dx/=d;dy/=d;}"
+                + "var el=document.elementFromPoint(innerWidth/2,innerHeight/2),t=null;"
+                + "while(el&&el!==document.body&&el!==document.documentElement){var s=getComputedStyle(el);"
+                + "if(dy&&/(auto|scroll|overlay)/.test(s.overflowY)&&el.scrollHeight>el.clientHeight+1){t=el;break;}"
+                + "if(!dy&&dx&&/(auto|scroll|overlay)/.test(s.overflowX)&&el.scrollWidth>el.clientWidth+1){t=el;break;}"
+                + "el=el.parentElement;}"
+                + "var o={left:dx,top:dy,behavior:m===0?'instant':'smooth'};"
+                + "if(t){t.scrollBy(o);}else{(document.scrollingElement||document.documentElement).scrollBy(o);}"
+                + "})(" + dx + "," + dy + "," + mode + ")";
+    }
+
     /** Adds (or refreshes) a <style> element that hides ad elements. */
     static String injectCssJs(String css) {
         return "(function(c){var r=document.documentElement;if(!r)return;"

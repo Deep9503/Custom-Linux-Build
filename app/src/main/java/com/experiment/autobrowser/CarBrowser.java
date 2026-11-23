@@ -215,22 +215,17 @@ public class CarBrowser implements SurfaceCallback {
 
     @Override
     public void onScroll(float distanceX, float distanceY) {
+        // Scroll the page directly (like a mouse wheel) instead of faking finger drags,
+        // which sites like YouTube mistook for taps or pull-to-refresh.
         if (web == null || (keyboard != null && keyboard.isOpen())) return;
-        // Simulate a finger drag so inner scrolling containers work too.
-        float cx = web.getWidth() / 2f, cy = web.getHeight() / 2f;
-        long t = SystemClock.uptimeMillis();
-        dispatch(t, t, MotionEvent.ACTION_DOWN, cx, cy);
-        int steps = 4;
-        for (int i = 1; i <= steps; i++) {
-            float f = i / (float) steps;
-            dispatch(t, t + i * 8L, MotionEvent.ACTION_MOVE, cx - distanceX * f, cy - distanceY * f);
-        }
-        dispatch(t, t + 40, MotionEvent.ACTION_UP, cx - distanceX, cy - distanceY);
+        web.evaluateJavascript(WebSetup.scrollJs(distanceX, distanceY, WebSetup.SCROLL_PIXELS), null);
     }
 
     @Override
     public void onFling(float velocityX, float velocityY) {
-        if (web != null && (keyboard == null || !keyboard.isOpen())) web.flingScroll((int) -velocityX, (int) -velocityY);
+        if (web == null || (keyboard != null && keyboard.isOpen())) return;
+        web.evaluateJavascript(WebSetup.scrollJs(-velocityX * 0.3f, -velocityY * 0.3f,
+                WebSetup.SCROLL_SMOOTH), null);
     }
 
     @Override
@@ -248,13 +243,6 @@ public class CarBrowser implements SurfaceCallback {
         e.recycle();
     }
 
-    private void dispatch(long down, long at, int action, float x, float y) {
-        MotionEvent e = MotionEvent.obtain(down, at, action, x, y, 0);
-        e.setSource(InputDevice.SOURCE_TOUCHSCREEN);
-        web.dispatchTouchEvent(e);
-        e.recycle();
-    }
-
     // ---------------------------------------------------------------- browser commands
 
     public void load(String url) {
@@ -265,8 +253,13 @@ public class CarBrowser implements SurfaceCallback {
     public void back() { if (web != null && web.canGoBack()) web.goBack(); }
     public void forward() { if (web != null && web.canGoForward()) web.goForward(); }
     public void reload() { if (web != null) web.reload(); }
-    public void pageUp() { if (web != null) web.pageUp(false); }
-    public void pageDown() { if (web != null) web.pageDown(false); }
+    public void pageUp() {
+        if (web != null) web.evaluateJavascript(WebSetup.scrollJs(0, -1, WebSetup.SCROLL_PAGES), null);
+    }
+
+    public void pageDown() {
+        if (web != null) web.evaluateJavascript(WebSetup.scrollJs(0, 1, WebSetup.SCROLL_PAGES), null);
+    }
     public void zoomIn() { if (web != null) web.zoomIn(); }
     public void zoomOut() { if (web != null) web.zoomOut(); }
 
