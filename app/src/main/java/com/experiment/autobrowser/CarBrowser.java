@@ -7,6 +7,7 @@ import android.hardware.display.DisplayManager;
 import android.hardware.display.VirtualDisplay;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Message;
 import android.os.SystemClock;
 import android.util.Log;
 import android.view.InputDevice;
@@ -24,6 +25,9 @@ import androidx.car.app.CarContext;
 import androidx.car.app.SurfaceCallback;
 import androidx.car.app.SurfaceContainer;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Draws a WebView onto the Android Auto map surface.
  *
@@ -39,21 +43,35 @@ public class CarBrowser implements SurfaceCallback {
         void onPageChanged(String url, String title);
     }
 
+    public static final int MAX_TABS = 10;
+
+    /** One browser tab. Its WebView exists only while the car screen is connected. */
+    public static final class Tab {
+        String url;
+        String title = "";
+        WebView view;
+
+        Tab(String url) { this.url = url; }
+
+        public String url() { return url == null ? "" : url; }
+        public String title() { return title == null || title.isEmpty() ? url() : title; }
+    }
+
     private final CarContext ctx;
     private final Handler main = new Handler(Looper.getMainLooper());
 
     private VirtualDisplay display;
     private Presentation presentation;
     private FrameLayout container;
-    private WebView web;
+    private WebView web; // the current tab's WebView
+    private final List<Tab> tabs = new ArrayList<>();
+    private int current;
     private CarKeyboard keyboard;
     private int surfaceW, surfaceH;
     private Rect visibleArea;
     private Rect stableArea;
     private float lastTapX = -1, lastTapY = -1;
 
-    private String currentUrl;
-    private String currentTitle = "";
     private volatile long lastTap;
     private Listener listener;
 
@@ -62,14 +80,18 @@ public class CarBrowser implements SurfaceCallback {
 
     public CarBrowser(CarContext ctx) {
         this.ctx = ctx;
-        this.currentUrl = Prefs.home(ctx);
+        for (String u : Prefs.tabs(ctx)) tabs.add(new Tab(u.isEmpty() ? Prefs.home(ctx) : u));
+        if (tabs.isEmpty()) tabs.add(new Tab(Prefs.home(ctx)));
+        current = Math.min(Math.max(0, Prefs.currentTab(ctx)), tabs.size() - 1);
         AdBlocker.init(ctx);
         active = this;
     }
 
     public void setListener(Listener l) { listener = l; }
-    public String url() { return currentUrl; }
-    public String title() { return currentTitle; }
+    public String url() { return tabs.get(current).url(); }
+    public String title() { String t = tabs.get(current).title; return t == null ? "" : t; }
+    public List<Tab> tabs() { return tabs; }
+    public int currentIndex() { return current; }
 
     // ---------------------------------------------------------------- surface lifecycle
 
@@ -88,28 +110,6 @@ public class CarBrowser implements SurfaceCallback {
             presentation = new Presentation(ctx, display.getDisplay());
             container = new FrameLayout(presentation.getContext());
             container.setBackgroundColor(Color.BLACK);
-
-            web = new WebView(presentation.getContext());
-            WebSetup.configure(ctx, web);
-            web.setWebViewClient(new BrowserClient(ctx, new BrowserClient.Callbacks() {
-                @Override
-                public void onStarted(String url) {
-                    currentUrl = url;
-                    if (keyboard != null && keyboard.isOpen()) keyboard.setVisibility(android.view.View.GONE);
-                }
-
-                @Override
-                public void onFinished(WebView v, String url) {
-                    currentUrl = url;
-                    currentTitle = v.getTitle() == null ? "" : v.getTitle();
-                    if (listener != null) listener.onPageChanged(currentUrl, currentTitle);
-                }
-            }, WebSetup.FOCUS_WATCH_JS));
-            web.addJavascriptInterface(new KeysBridge(), WebSetup.KEYS_BRIDGE);
-            web.setWebChromeClient(new WebChromeClient());
-
-            container.addView(web, new FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
             keyboard = new CarKeyboard(presentation.getContext(), new CarKeyboard.Listener() {
                 @Override
@@ -132,7 +132,7 @@ public class CarBrowser implements SurfaceCallback {
             presentation.setContentView(container);
             presentation.show();
             applyVisibleArea();
-            web.loadUrl(currentUrl);
+            switchTo(current);
         } catch (Exception e) {
             Log.e(TAG, "Could not attach browser to car surface", e);
         }
@@ -176,11 +176,15 @@ public class CarBrowser implements SurfaceCallback {
     }
 
     private void releaseDisplay() {
-        if (web != null) {
-            web.stopLoading();
-            web.destroy();
-            web = null;
+        saveTabs();
+        for (Tab t : tabs) {
+            if (t.view != null) {
+                t.view.stopLoading();
+                t.view.destroy();
+                t.view = null;
+            }
         }
+        web = null;
         if (presentation != null) {
             presentation.dismiss();
             presentation = null;
@@ -246,8 +250,107 @@ public class CarBrowser implements SurfaceCallback {
     // ---------------------------------------------------------------- browser commands
 
     public void load(String url) {
-        currentUrl = url;
-        main.post(() -> { if (web != null) web.loadUrl(url); });
+        Tab t = tabs.get(current);
+        t.url = url;
+        t.title = "";
+        saveTabs();
+        main.post(() -> { if (t.view != null) t.view.loadUrl(url); });
+    }
+
+    // ---------------------------------------------------------------- tabs
+
+    /** Shows tab {@code i} on the car screen, creating its WebView if needed. */
+    public void switchTo(int i) {
+        if (i < 0 || i >= tabs.size()) return;
+        current = i;
+        Tab t = tabs.get(i);
+        if (container != null) {
+            if (web != null && web != t.view) container.removeView(web);
+            boolean fresh = t.view == null;
+            if (fresh) t.view = createWebView(t);
+            if (t.view.getParent() == null) {
+                container.addView(t.view, 0, new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            }
+            web = t.view;
+            if (fresh && t.url != null && !t.url.isEmpty()) web.loadUrl(t.url);
+        }
+        saveTabs();
+        if (listener != null) listener.onPageChanged(t.url(), t.title);
+    }
+
+    /** Opens a new tab (at most {@link #MAX_TABS}) and shows it. */
+    public boolean newTab(String url) {
+        if (tabs.size() >= MAX_TABS) return false;
+        tabs.add(new Tab(url));
+        switchTo(tabs.size() - 1);
+        return true;
+    }
+
+    public void closeTab(int i) {
+        if (i < 0 || i >= tabs.size()) return;
+        Tab t = tabs.remove(i);
+        if (t.view != null) {
+            if (container != null) container.removeView(t.view);
+            if (web == t.view) web = null;
+            t.view.destroy();
+        }
+        if (tabs.isEmpty()) tabs.add(new Tab(Prefs.home(ctx)));
+        if (current > i || current >= tabs.size()) current = Math.max(0, current - 1);
+        switchTo(current);
+    }
+
+    private void saveTabs() {
+        List<String> urls = new ArrayList<>();
+        for (Tab t : tabs) urls.add(t.url());
+        Prefs.setTabs(ctx, urls, current);
+    }
+
+    private WebView createWebView(Tab tab) {
+        WebView v = new WebView(presentation.getContext());
+        WebSetup.configure(ctx, v);
+        v.getSettings().setSupportMultipleWindows(true); // target=_blank links open new tabs
+        v.setWebViewClient(new BrowserClient(ctx, new BrowserClient.Callbacks() {
+            @Override
+            public void onStarted(String url) {
+                tab.url = url;
+                if (v == web && keyboard != null && keyboard.isOpen() && keyboard.isPageMode()) {
+                    keyboard.setVisibility(android.view.View.GONE);
+                }
+            }
+
+            @Override
+            public void onFinished(WebView view, String url) {
+                tab.url = url;
+                tab.title = view.getTitle() == null ? "" : view.getTitle();
+                saveTabs();
+                if (view == web && listener != null) listener.onPageChanged(tab.url, tab.title);
+            }
+        }, WebSetup.FOCUS_WATCH_JS));
+        v.addJavascriptInterface(new KeysBridge(), WebSetup.KEYS_BRIDGE);
+        v.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture,
+                                          Message resultMsg) {
+                // Only for links the user tapped; scripted pop-ups are blocked.
+                if (!isUserGesture || tabs.size() >= MAX_TABS || presentation == null) return false;
+                Tab t = new Tab("");
+                t.view = createWebView(t);
+                tabs.add(t);
+                ((WebView.WebViewTransport) resultMsg.obj).setWebView(t.view);
+                resultMsg.sendToTarget();
+                switchTo(tabs.size() - 1);
+                return true;
+            }
+
+            @Override
+            public void onCloseWindow(WebView window) {
+                for (int i = 0; i < tabs.size(); i++) {
+                    if (tabs.get(i).view == window) { closeTab(i); break; }
+                }
+            }
+        });
+        return v;
     }
 
     public void back() { if (web != null && web.canGoBack()) web.goBack(); }

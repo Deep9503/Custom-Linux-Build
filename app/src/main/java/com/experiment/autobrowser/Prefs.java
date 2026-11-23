@@ -70,6 +70,24 @@ public final class Prefs {
         sp(c).edit().putBoolean(K_DESKTOP, on).apply();
     }
 
+    private static final String K_TABS = "tabs";
+    private static final String K_TAB = "tab";
+
+    public static List<String> tabs(Context c) {
+        String raw = sp(c).getString(K_TABS, "");
+        List<String> out = new ArrayList<>();
+        if (!raw.isEmpty()) out.addAll(Arrays.asList(raw.split(SEP, -1)));
+        return out;
+    }
+
+    public static int currentTab(Context c) {
+        return sp(c).getInt(K_TAB, 0);
+    }
+
+    public static void setTabs(Context c, List<String> urls, int current) {
+        sp(c).edit().putString(K_TABS, String.join(SEP, urls)).putInt(K_TAB, current).apply();
+    }
+
     public static boolean adBlock(Context c) {
         return sp(c).getBoolean(K_ADBLOCK, true);
     }

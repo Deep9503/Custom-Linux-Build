@@ -38,6 +38,8 @@ public class BrowserScreen extends Screen {
                 .addAction(Action.PAN)
                 .addAction(icon(R.drawable.ic_up, browser::pageUp))
                 .addAction(icon(R.drawable.ic_down, browser::pageDown))
+                .addAction(icon(R.drawable.ic_tabs, () ->
+                        getScreenManager().push(new TabsScreen(getCarContext(), browser))))
                 .build();
 
         return new NavigationTemplate.Builder()

@@ -89,6 +89,8 @@ class CarKeyboard extends LinearLayout {
 
     boolean isOpen() { return getVisibility() == VISIBLE; }
 
+    boolean isPageMode() { return mode == MODE_PAGE; }
+
     /** True if (x, y) in the parent's coordinates falls on the keyboard. */
     boolean contains(float x, float y) {
         return isOpen() && x >= getLeft() && x < getRight() && y >= getTop() && y < getBottom();

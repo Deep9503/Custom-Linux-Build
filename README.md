@@ -15,6 +15,12 @@ VirtualDisplay, and car touch input (tap, pan, fling, pinch) is forwarded to it.
 - **YouTube ad blocking**: strips ad data from the player, hides ad cards, auto-skips anything left.
 - **Send to car** (phone app): type on the phone keyboard, open the result on the car screen.
 
+## What's new in 0.4
+- **Tabs** on the car screen: tabs button (next to ▲▼) → new tab, switch, close. Up to 10 tabs,
+  remembered between drives. Links that open in a new window open in a new tab.
+- **Scrolling fixed**: ▲/▼ and pan-drag scroll the page directly (works on YouTube, no accidental
+  taps or pull-to-refresh).
+
 ## Car controls
 - 🔍 Search / URL — car keyboard (only while parked on most cars). Recent searches + quick links are tappable rows.
 - ◀ Back, ⟳ Reload, ☰ Menu (search engine, type into page field, forward, home, desktop site, set home)
