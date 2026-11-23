@@ -1,6 +1,5 @@
 package com.experiment.autobrowser;
 
-import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.KeyEvent;
@@ -8,9 +7,7 @@ import android.view.View;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.webkit.WebChromeClient;
-import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
-import android.webkit.WebViewClient;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
@@ -19,6 +16,8 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.Spinner;
+import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -28,6 +27,7 @@ public class MainActivity extends AppCompatActivity {
     private WebView web;
     private EditText address;
     private ProgressBar progress;
+    private TextView blockedLabel;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -91,7 +91,7 @@ public class MainActivity extends AppCompatActivity {
         Button home = small("⌂", v -> web.loadUrl(Prefs.home(this)));
         Button setHome = small("★", v -> {
             Prefs.setHome(this, web.getUrl());
-            android.widget.Toast.makeText(this, "Home page saved", android.widget.Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Home page saved", Toast.LENGTH_SHORT).show();
         });
         tools.addView(engine, new LinearLayout.LayoutParams(0, -2, 1f));
         tools.addView(desktop);
@@ -101,22 +101,49 @@ public class MainActivity extends AppCompatActivity {
         tools.addView(home);
         tools.addView(setHome);
 
+        // Row 3: ad blocking + send to car
+        LinearLayout row3 = new LinearLayout(this);
+        row3.setGravity(Gravity.CENTER_VERTICAL);
+        row3.setPadding(pad, 0, pad, 0);
+        CheckBox adblock = new CheckBox(this);
+        adblock.setText("Block ads");
+        adblock.setChecked(Prefs.adBlock(this));
+        adblock.setOnCheckedChangeListener((b, on) -> {
+            Prefs.setAdBlock(this, on);
+            web.reload();
+        });
+        blockedLabel = new TextView(this);
+        blockedLabel.setPadding(pad, 0, pad, 0);
+        Button update = small("Update filters", v -> {
+            Toast.makeText(this, "Downloading ad filter lists…", Toast.LENGTH_SHORT).show();
+            AdBlocker.update(this, msg -> {
+                Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
+                refreshBlocked();
+            });
+        });
+        Button toCar = small("Send to car", v -> sendToCar());
+        row3.addView(adblock);
+        row3.addView(blockedLabel, new LinearLayout.LayoutParams(0, -2, 1f));
+        row3.addView(update);
+        row3.addView(toCar);
+
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         progress.setMax(100);
 
         web = new WebView(this);
+        AdBlocker.init(this);
         WebSetup.configure(this, web);
-        web.setWebViewClient(new WebViewClient() {
+        web.setWebViewClient(new BrowserClient(this, new BrowserClient.Callbacks() {
             @Override
-            public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {
-                String s = r.getUrl().getScheme();
-                return s == null || !(s.equals("http") || s.equals("https"));
-            }
-            @Override
-            public void onPageStarted(WebView v, String url, Bitmap icon) {
+            public void onStarted(String url) {
                 if (!address.hasFocus()) address.setText(url);
             }
-        });
+
+            @Override
+            public void onFinished(WebView v, String url) {
+                refreshBlocked();
+            }
+        }, null));
         web.setWebChromeClient(new WebChromeClient() {
             @Override
             public void onProgressChanged(WebView v, int p) {
@@ -127,6 +154,7 @@ public class MainActivity extends AppCompatActivity {
 
         root.addView(bar);
         root.addView(tools);
+        root.addView(row3);
         root.addView(progress, new LinearLayout.LayoutParams(-1, dp(4)));
         root.addView(web, new LinearLayout.LayoutParams(-1, 0, 1f));
         setContentView(root);
@@ -143,6 +171,24 @@ public class MainActivity extends AppCompatActivity {
         web.requestFocus();
         InputMethodManager imm = getSystemService(InputMethodManager.class);
         imm.hideSoftInputFromWindow(address.getWindowToken(), 0);
+    }
+
+    private void refreshBlocked() {
+        blockedLabel.setText(Prefs.adBlock(this) ? "Blocked: " + AdBlocker.blockedCount() : "");
+    }
+
+    /** Use the phone keyboard to search, then show the result on the car screen. */
+    private void sendToCar() {
+        CarBrowser car = CarBrowser.active;
+        if (car == null) {
+            Toast.makeText(this, "Auto Browser isn't open in Android Auto", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String text = address.getText().toString().trim();
+        String url = text.isEmpty() || text.equals(web.getUrl()) ? web.getUrl() : Prefs.resolve(this, text);
+        if (!text.isEmpty()) Prefs.addRecent(this, text);
+        car.load(url);
+        Toast.makeText(this, "Opened on car screen", Toast.LENGTH_SHORT).show();
     }
 
     private Button small(String label, View.OnClickListener l) {

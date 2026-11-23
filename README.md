@@ -7,6 +7,14 @@ Android Auto doesn't allow browsers, so the app registers as a *navigation* app,
 drawing surface on the car display. A WebView is rendered onto that surface through a private
 VirtualDisplay, and car touch input (tap, pan, fling, pinch) is forwarded to it.
 
+## What's new in 0.2
+- **On-screen keyboard** drawn by the app on the car screen (works even when Android Auto's keyboard is locked).
+  Tap 🔍 to search, or tap any text box on a page and the keyboard opens for it.
+- **Ad & tracker blocking** using the filter lists Brave's shields are built on (EasyList, EasyPrivacy,
+  Peter Lowe's list): blocks ad/tracker requests and hides ad elements. Lists are bundled and auto-update weekly.
+- **YouTube ad blocking**: strips ad data from the player, hides ad cards, auto-skips anything left.
+- **Send to car** (phone app): type on the phone keyboard, open the result on the car screen.
+
 ## Car controls
 - 🔍 Search / URL — car keyboard (only while parked on most cars). Recent searches + quick links are tappable rows.
 - ◀ Back, ⟳ Reload, ☰ Menu (search engine, type into page field, forward, home, desktop site, set home)

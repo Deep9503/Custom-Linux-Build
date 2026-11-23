@@ -1,7 +1,6 @@
 package com.experiment.autobrowser;
 
 import android.app.Presentation;
-import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.hardware.display.DisplayManager;
@@ -14,10 +13,10 @@ import android.view.InputDevice;
 import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.ViewGroup;
+import android.view.Gravity;
+import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
-import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
-import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
@@ -47,16 +46,23 @@ public class CarBrowser implements SurfaceCallback {
     private Presentation presentation;
     private FrameLayout container;
     private WebView web;
+    private CarKeyboard keyboard;
     private int surfaceW, surfaceH;
     private Rect visibleArea;
 
     private String currentUrl;
     private String currentTitle = "";
+    private volatile long lastTap;
     private Listener listener;
+
+    /** The browser currently shown in the car, if any (lets the phone app send pages to it). */
+    public static volatile CarBrowser active;
 
     public CarBrowser(CarContext ctx) {
         this.ctx = ctx;
         this.currentUrl = Prefs.home(ctx);
+        AdBlocker.init(ctx);
+        active = this;
     }
 
     public void setListener(Listener l) { listener = l; }
@@ -83,30 +89,44 @@ public class CarBrowser implements SurfaceCallback {
 
             web = new WebView(presentation.getContext());
             WebSetup.configure(ctx, web);
-            web.setWebViewClient(new WebViewClient() {
+            web.setWebViewClient(new BrowserClient(ctx, new BrowserClient.Callbacks() {
                 @Override
-                public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {
-                    String scheme = r.getUrl().getScheme();
-                    // Keep http(s) inside the browser; ignore app deep links (intent:, market:, ...).
-                    return scheme == null || !(scheme.equals("http") || scheme.equals("https"));
-                }
-
-                @Override
-                public void onPageStarted(WebView v, String url, Bitmap favicon) {
+                public void onStarted(String url) {
                     currentUrl = url;
+                    if (keyboard != null && keyboard.isOpen()) keyboard.setVisibility(android.view.View.GONE);
                 }
 
                 @Override
-                public void onPageFinished(WebView v, String url) {
+                public void onFinished(WebView v, String url) {
                     currentUrl = url;
                     currentTitle = v.getTitle() == null ? "" : v.getTitle();
                     if (listener != null) listener.onPageChanged(currentUrl, currentTitle);
                 }
-            });
+            }, WebSetup.FOCUS_WATCH_JS));
+            web.addJavascriptInterface(new KeysBridge(), WebSetup.KEYS_BRIDGE);
             web.setWebChromeClient(new WebChromeClient());
 
             container.addView(web, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+            keyboard = new CarKeyboard(presentation.getContext(), new CarKeyboard.Listener() {
+                @Override
+                public void onSubmit(String text, int mode, boolean enter) {
+                    if (mode == CarKeyboard.MODE_PAGE) {
+                        typeIntoPage(text, enter);
+                    } else if (!text.trim().isEmpty()) {
+                        Prefs.addRecent(ctx, text.trim());
+                        load(Prefs.resolve(ctx, text));
+                    }
+                }
+
+                @Override
+                public void onClose() { }
+            });
+            keyboard.setVisibility(android.view.View.GONE);
+            container.addView(keyboard, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                    Gravity.BOTTOM));
             presentation.setContentView(container);
             presentation.show();
             applyVisibleArea();
@@ -142,6 +162,7 @@ public class CarBrowser implements SurfaceCallback {
 
     public void release() {
         releaseDisplay();
+        if (active == this) active = null;
     }
 
     private void releaseDisplay() {
@@ -159,19 +180,20 @@ public class CarBrowser implements SurfaceCallback {
             display = null;
         }
         container = null;
+        keyboard = null;
     }
 
     // ---------------------------------------------------------------- input from the car
 
     @Override
     public void onClick(float x, float y) {
-        if (web == null) return;
-        float wx = x - container.getPaddingLeft();
-        float wy = y - container.getPaddingTop();
-        if (wx < 0 || wy < 0 || wx > web.getWidth() || wy > web.getHeight()) return;
+        if (container == null) return;
+        // Surface coordinates == container coordinates, so the tap reaches the
+        // on-screen keyboard if it's open, otherwise the web page underneath.
         long t = SystemClock.uptimeMillis();
-        dispatch(t, t, MotionEvent.ACTION_DOWN, wx, wy);
-        dispatch(t, t + 60, MotionEvent.ACTION_UP, wx, wy);
+        lastTap = t;
+        tap(container, t, MotionEvent.ACTION_DOWN, x, y);
+        tap(container, t, MotionEvent.ACTION_UP, x, y);
     }
 
     @Override
@@ -199,6 +221,14 @@ public class CarBrowser implements SurfaceCallback {
         if (web != null && scaleFactor > 0) {
             web.zoomBy(Math.max(0.02f, Math.min(50f, scaleFactor)));
         }
+    }
+
+    private static void tap(android.view.View target, long down, int action, float x, float y) {
+        MotionEvent e = MotionEvent.obtain(down, down + (action == MotionEvent.ACTION_UP ? 60 : 0),
+                action, x, y, 0);
+        e.setSource(InputDevice.SOURCE_TOUCHSCREEN);
+        target.dispatchTouchEvent(e);
+        e.recycle();
     }
 
     private void dispatch(long down, long at, int action, float x, float y) {
@@ -230,7 +260,29 @@ public class CarBrowser implements SurfaceCallback {
         }
     }
 
-    public void typeIntoPage(String text) {
-        if (web != null) web.evaluateJavascript(WebSetup.typeIntoFocusedFieldJs(text), null);
+    public void typeIntoPage(String text, boolean enter) {
+        if (web != null) web.evaluateJavascript(WebSetup.typeIntoFocusedFieldJs(text, enter), null);
+    }
+
+    /** Opens the on-screen keyboard for a web search / address. */
+    public void showAddressKeyboard() {
+        if (keyboard != null) {
+            keyboard.open(CarKeyboard.MODE_ADDRESS, "",
+                    "Search " + Prefs.engineName(ctx) + " or type a web address");
+        }
+    }
+
+    /** Called from page JavaScript when a text field gets focus. */
+    private class KeysBridge {
+        @JavascriptInterface
+        public void onFocus(String value, String type, String label) {
+            main.post(() -> {
+                // Only react to fields the user tapped, not ones a page focuses by itself.
+                if (keyboard == null || SystemClock.uptimeMillis() - lastTap > 2000) return;
+                String hint = !label.isEmpty() ? label
+                        : "password".equals(type) ? "Password" : "Type here";
+                keyboard.open(CarKeyboard.MODE_PAGE, value, hint);
+            });
+        }
     }
 }

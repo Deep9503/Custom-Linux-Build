@@ -30,6 +30,8 @@ public final class Prefs {
     private static final String K_HOME = "home";
     private static final String K_DESKTOP = "desktop";
     private static final String K_RECENT = "recent";
+    private static final String K_ADBLOCK = "adblock";
+    private static final String K_FILTERS_UPDATED = "filters_updated";
     private static final String SEP = "\u001F";
     private static final int MAX_RECENT = 5;
 
@@ -66,6 +68,22 @@ public final class Prefs {
 
     public static void setDesktopMode(Context c, boolean on) {
         sp(c).edit().putBoolean(K_DESKTOP, on).apply();
+    }
+
+    public static boolean adBlock(Context c) {
+        return sp(c).getBoolean(K_ADBLOCK, true);
+    }
+
+    public static void setAdBlock(Context c, boolean on) {
+        sp(c).edit().putBoolean(K_ADBLOCK, on).apply();
+    }
+
+    public static long filtersUpdated(Context c) {
+        return sp(c).getLong(K_FILTERS_UPDATED, 0);
+    }
+
+    public static void setFiltersUpdated(Context c, long t) {
+        sp(c).edit().putLong(K_FILTERS_UPDATED, t).apply();
     }
 
     public static List<String> recent(Context c) {

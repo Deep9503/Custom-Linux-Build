@@ -22,6 +22,21 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Bundle ad-block filter lists
+        run: |
+          mkdir -p app/src/main/assets/filters
+          cd app/src/main/assets/filters
+          curl -fsSL --retry 3 https://easylist.to/easylist/easylist.txt -o easylist.txt || echo "easylist download failed"
+          curl -fsSL --retry 3 https://easylist.to/easylist/easyprivacy.txt -o easyprivacy.txt || echo "easyprivacy download failed"
+          curl -fsSL --retry 3 "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblockplus&showintro=0&mimetype=plaintext" -o peterlowe.txt || echo "peter lowe download failed"
+          wc -l *.txt || true
+
+      - name: Check ad-block engine against real lists
+        run: |
+          mkdir -p /tmp/fc
+          javac -d /tmp/fc app/src/main/java/com/experiment/autobrowser/FilterEngine.java ci/FilterCheck.java
+          java -cp /tmp/fc com.experiment.autobrowser.FilterCheck app/src/main/assets/filters/*.txt || true
+
       - name: Build APK
         run: gradle assembleDebug --stacktrace
 

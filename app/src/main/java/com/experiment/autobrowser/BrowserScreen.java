@@ -26,8 +26,7 @@ public class BrowserScreen extends Screen {
     @Override
     public Template onGetTemplate() {
         ActionStrip actions = new ActionStrip.Builder()
-                .addAction(icon(R.drawable.ic_search, () ->
-                        getScreenManager().push(new InputScreen(getCarContext(), browser, InputScreen.MODE_URL))))
+                .addAction(icon(R.drawable.ic_search, browser::showAddressKeyboard))
                 .addAction(icon(R.drawable.ic_back, browser::back))
                 .addAction(icon(R.drawable.ic_refresh, browser::reload))
                 .addAction(icon(R.drawable.ic_menu, () ->

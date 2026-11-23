@@ -88,7 +88,7 @@ public class InputScreen extends Screen {
     private void submit(String text) {
         if (text.trim().isEmpty()) return;
         if (mode == MODE_PAGE) {
-            browser.typeIntoPage(text);
+            browser.typeIntoPage(text, true);
             CarToast.makeText(getCarContext(), "Typed into page", CarToast.LENGTH_SHORT).show();
             getScreenManager().popToRoot();
             return;

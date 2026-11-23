@@ -25,7 +25,9 @@ public class MenuScreen extends Screen {
     @Override
     public Template onGetTemplate() {
         CarContext c = getCarContext();
-        String title = browser.title().isEmpty() ? "Browser" : browser.title();
+        String title = Prefs.adBlock(c)
+                ? "Ads & trackers blocked: " + AdBlocker.blockedCount()
+                : (browser.title().isEmpty() ? "Browser" : browser.title());
 
         ItemList list = new ItemList.Builder()
                 .addItem(new Row.Builder()
@@ -36,10 +38,19 @@ public class MenuScreen extends Screen {
                                 getScreenManager().push(new EngineScreen(c)))
                         .build())
                 .addItem(new Row.Builder()
-                        .setTitle("Type into page field")
-                        .addText("Fill a site's own search box or form")
+                        .setTitle("Ad & tracker blocking")
+                        .addText(AdBlocker.summary() + " + YouTube ads")
+                        .setToggle(new Toggle.Builder(on -> {
+                            Prefs.setAdBlock(c, on);
+                            browser.reload();
+                            invalidate();
+                        }).setChecked(Prefs.adBlock(c)).build())
+                        .build())
+                .addItem(new Row.Builder()
+                        .setTitle("Recent & quick links")
+                        .setBrowsable(true)
                         .setOnClickListener(() -> getScreenManager().push(
-                                new InputScreen(c, browser, InputScreen.MODE_PAGE)))
+                                new InputScreen(c, browser, InputScreen.MODE_URL)))
                         .build())
                 .addItem(new Row.Builder()
                         .setTitle("Forward")
