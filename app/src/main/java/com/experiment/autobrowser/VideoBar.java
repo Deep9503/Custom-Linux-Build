@@ -11,6 +11,8 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -28,7 +30,7 @@ class VideoBar extends LinearLayout {
     }
 
     private final Listener listener;
-    private final TextView playPause;
+    private final ImageView playPause;
     private final TextView time;
     private final Timeline timeline;
     private boolean hiddenByUser;
@@ -38,33 +40,40 @@ class VideoBar extends LinearLayout {
         super(c);
         this.listener = listener;
         setGravity(Gravity.CENTER_VERTICAL);
-        setBackgroundColor(0xD9000000);
-        int p = dp(4);
-        setPadding(p, p, p, p);
+        // Soft fade from transparent to dark, like a streaming app's controls.
+        setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{0x00000000, 0xB3000000, 0xE6000000}));
+        setPadding(dp(12), dp(28), dp(12), dp(10));
         setClickable(true); // taps on gaps don't fall through to the page
         setVisibility(GONE);
 
-        addView(button("⏪ 10", () -> listener.onSeekBy(-10)), size(76));
-        playPause = button("▶", () -> {
+        addView(skipButton(R.drawable.ic_replay, () -> listener.onSeekBy(-10)), size(52));
+        playPause = icon(R.drawable.ic_play, dp(34));
+        playPause.setOnClickListener(v -> {
+            flash(v);
             paused = !paused;
-            playPause.setText(paused ? "▶" : "⏸");
+            playPause.setImageResource(paused ? R.drawable.ic_play : R.drawable.ic_pause);
             listener.onToggle();
         });
-        addView(playPause, size(64));
-        addView(button("10 ⏩", () -> listener.onSeekBy(10)), size(76));
+        addView(playPause, size(60));
+        addView(skipButton(R.drawable.ic_forward10, () -> listener.onSeekBy(10)), size(52));
 
         time = new TextView(c);
         time.setTextColor(Color.WHITE);
-        time.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
-        time.setPadding(dp(8), 0, dp(8), 0);
+        time.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        time.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        time.setPadding(dp(12), 0, dp(6), 0);
         addView(time);
 
         timeline = new Timeline(c);
         addView(timeline, new LayoutParams(0, dp(44), 1f));
-        addView(button("✕", () -> {
+        ImageView close = icon(R.drawable.ic_close, dp(22));
+        close.setAlpha(0.8f);
+        close.setOnClickListener(v -> {
             hiddenByUser = true;
             setVisibility(GONE);
-        }), size(52));
+        });
+        addView(close, size(48));
     }
 
     /** Called about once a second with the page's video state; t < 0 means no video. */
@@ -74,7 +83,7 @@ class VideoBar extends LinearLayout {
             return;
         }
         paused = isPaused;
-        playPause.setText(paused ? "▶" : "⏸");
+        playPause.setImageResource(paused ? R.drawable.ic_play : R.drawable.ic_pause);
         time.setText(duration > 0 ? fmt(t) + " / " + fmt(duration) : fmt(t) + " · LIVE");
         timeline.set(duration > 0 ? (float) (t / duration) : -1f);
         if (!hiddenByUser) setVisibility(VISIBLE);
@@ -102,28 +111,43 @@ class VideoBar extends LinearLayout {
         return h > 0 ? String.format("%d:%02d:%02d", h, m, sec) : String.format("%d:%02d", m, sec);
     }
 
-    private TextView button(String label, Runnable action) {
-        TextView t = new TextView(getContext());
-        t.setText(label);
-        t.setGravity(Gravity.CENTER);
-        t.setTextColor(Color.WHITE);
-        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
-        t.setTypeface(Typeface.DEFAULT_BOLD);
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(0xFF3C4043);
-        bg.setCornerRadius(dp(6));
-        t.setBackground(bg);
-        t.setOnClickListener(v -> {
-            bg.setColor(0xFF8AB4F8);
-            v.postDelayed(() -> bg.setColor(0xFF3C4043), 150);
-            action.run();
-        });
-        return t;
+    private ImageView icon(int res, int sizePx) {
+        ImageView iv = new ImageView(getContext());
+        iv.setImageResource(res);
+        iv.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        int pad = Math.max(0, (dp(44) - sizePx) / 2);
+        iv.setPadding(pad, pad, pad, pad);
+        return iv;
+    }
+
+    /** Circular-arrow icon with a small "10" in the middle. */
+    private View skipButton(int res, Runnable action) {
+        FrameLayout f = new FrameLayout(getContext());
+        f.addView(icon(res, dp(32)), new FrameLayout.LayoutParams(-1, -1));
+        TextView ten = new TextView(getContext());
+        ten.setText("10");
+        ten.setTextColor(Color.WHITE);
+        ten.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9);
+        ten.setTypeface(Typeface.DEFAULT_BOLD);
+        ten.setGravity(Gravity.CENTER);
+        ten.setPadding(0, dp(3), 0, 0);
+        f.addView(ten, new FrameLayout.LayoutParams(-1, -1));
+        f.setOnClickListener(v -> { flash(v); action.run(); });
+        return f;
+    }
+
+    /** Brief round highlight so the driver sees the tap registered. */
+    private void flash(View v) {
+        GradientDrawable g = new GradientDrawable();
+        g.setShape(GradientDrawable.OVAL);
+        g.setColor(0x40FFFFFF);
+        v.setBackground(g);
+        v.postDelayed(() -> v.setBackground(null), 180);
     }
 
     private LayoutParams size(int widthDp) {
         LayoutParams lp = new LayoutParams(dp(widthDp), dp(44));
-        lp.setMargins(dp(3), 0, dp(3), 0);
+        lp.setMargins(dp(2), 0, dp(2), 0);
         return lp;
     }
 
@@ -141,7 +165,7 @@ class VideoBar extends LinearLayout {
 
         Timeline(Context c) {
             super(c);
-            track.setColor(0xFF5F6368);
+            track.setColor(0x4DFFFFFF);
             done.setColor(0xFFFF0033);
             knob.setColor(Color.WHITE);
         }
@@ -159,7 +183,7 @@ class VideoBar extends LinearLayout {
             if (progress >= 0) {
                 float x = pad + w * Math.min(1f, progress);
                 c.drawRoundRect(pad, cy - h, x, cy + h, h, h, done);
-                c.drawCircle(x, cy, dp(8), knob);
+                c.drawCircle(x, cy, dp(7), knob);
             }
         }
 

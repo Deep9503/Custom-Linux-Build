@@ -48,9 +48,12 @@ class CarKeyboard extends LinearLayout {
         super(c);
         this.listener = listener;
         setOrientation(VERTICAL);
-        setBackgroundColor(0xF0202124);
-        int p = dp(4);
-        setPadding(p, p, p, p);
+        GradientDrawable panel = new GradientDrawable();
+        panel.setColor(0xF2181A1C);
+        float r = dp(16);
+        panel.setCornerRadii(new float[]{r, r, r, r, 0, 0, 0, 0}); // rounded top only
+        setBackground(panel);
+        setPadding(dp(8), dp(8), dp(8), dp(6));
         setClickable(true); // swallow taps on gaps so they don't reach the page
 
         LinearLayout header = new LinearLayout(c);
@@ -62,11 +65,11 @@ class CarKeyboard extends LinearLayout {
         preview.setEllipsize(TextUtils.TruncateAt.START);
         preview.setPadding(dp(10), dp(6), dp(10), dp(6));
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(0xFF3C4043);
-        bg.setCornerRadius(dp(8));
+        bg.setColor(0xFF2F3134);
+        bg.setCornerRadius(dp(20));
         preview.setBackground(bg);
         header.addView(preview, new LayoutParams(0, dp(40), 1f));
-        header.addView(key("✕", 0, 0xFF5F6368, this::close), new LayoutParams(dp(56), dp(40)));
+        header.addView(key("✕", 0, 0xFF44474A, this::close), new LayoutParams(dp(56), dp(40)));
         addView(header);
 
         rows = new LinearLayout(c);
@@ -106,18 +109,18 @@ class CarKeyboard extends LinearLayout {
         String[][] layout = symbols ? SYMBOLS : LETTERS;
         for (int r = 0; r < layout.length; r++) {
             LinearLayout row = newRow();
-            if (r == 2 && !symbols) row.addView(key(shift ? "⇧●" : "⇧", 0, 0xFF5F6368, () -> {
+            if (r == 2 && !symbols) row.addView(key(shift ? "⇧●" : "⇧", 0, 0xFF44474A, () -> {
                 shift = !shift; build();
             }), weight(1.5f));
             for (String k : layout[r]) {
                 String label = shift && !symbols ? k.toUpperCase() : k;
                 row.addView(key(label, 0, 0, () -> type(label)), weight(1f));
             }
-            if (r == 2) row.addView(key("⌫", 0, 0xFF5F6368, this::backspace), weight(1.5f));
+            if (r == 2) row.addView(key("⌫", 0, 0xFF44474A, this::backspace), weight(1.5f));
             rows.addView(row);
         }
         LinearLayout last = newRow();
-        last.addView(key(symbols ? "ABC" : "123", 0, 0xFF5F6368, () -> {
+        last.addView(key(symbols ? "ABC" : "123", 0, 0xFF44474A, () -> {
             symbols = !symbols; build();
         }), weight(1.4f));
         if (mode == MODE_ADDRESS) {
@@ -130,7 +133,7 @@ class CarKeyboard extends LinearLayout {
             last.addView(key("@", 0, 0, () -> type("@")), weight(0.9f));
             last.addView(key("space", 0, 0, () -> type(" ")), weight(3.5f));
             last.addView(key(".", 0, 0, () -> type(".")), weight(0.9f));
-            last.addView(key("Done", 0, 0xFF5F6368, () -> submit(false)), weight(1.5f));
+            last.addView(key("Done", 0, 0xFF44474A, () -> submit(false)), weight(1.5f));
             last.addView(key("Enter", 0, 0xFF1A73E8, () -> submit(true)), weight(1.6f));
         }
         rows.addView(last);
@@ -183,15 +186,15 @@ class CarKeyboard extends LinearLayout {
         t.setGravity(Gravity.CENTER);
         t.setTextColor(Color.WHITE);
         t.setTextSize(TypedValue.COMPLEX_UNIT_SP, label.length() > 2 ? 15 : 20);
-        t.setTypeface(Typeface.DEFAULT_BOLD);
+        t.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(color == 0 ? 0xFF3C4043 : color);
+        bg.setColor(color == 0 ? 0xFF2F3134 : color);
         bg.setCornerRadius(dp(6));
         t.setBackground(bg);
         t.setOnClickListener(v -> {
             // Flash the key so the driver can see which one registered.
             bg.setColor(0xFF8AB4F8);
-            v.postDelayed(() -> bg.setColor(color == 0 ? 0xFF3C4043 : color), 150);
+            v.postDelayed(() -> bg.setColor(color == 0 ? 0xFF2F3134 : color), 150);
             action.run();
         });
         return t;

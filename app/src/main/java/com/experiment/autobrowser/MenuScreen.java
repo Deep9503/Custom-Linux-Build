@@ -31,6 +31,28 @@ public class MenuScreen extends Screen {
 
         ItemList list = new ItemList.Builder()
                 .addItem(new Row.Builder()
+                        .setTitle("Reload page")
+                        .setOnClickListener(() -> { browser.reload(); getScreenManager().pop(); })
+                        .build())
+                .addItem(new Row.Builder()
+                        .setTitle("Forward")
+                        .setOnClickListener(() -> { browser.forward(); getScreenManager().pop(); })
+                        .build())
+                .addItem(new Row.Builder()
+                        .setTitle("Home")
+                        .addText(Prefs.home(c))
+                        .setOnClickListener(() -> {
+                            browser.load(Prefs.home(c));
+                            getScreenManager().pop();
+                        })
+                        .build())
+                .addItem(new Row.Builder()
+                        .setTitle("Recent & quick links")
+                        .setBrowsable(true)
+                        .setOnClickListener(() -> getScreenManager().push(
+                                new InputScreen(c, browser, InputScreen.MODE_URL)))
+                        .build())
+                .addItem(new Row.Builder()
                         .setTitle("Search engine")
                         .addText(Prefs.engineName(c))
                         .setBrowsable(true)
@@ -45,24 +67,6 @@ public class MenuScreen extends Screen {
                             browser.reload();
                             invalidate();
                         }).setChecked(Prefs.adBlock(c)).build())
-                        .build())
-                .addItem(new Row.Builder()
-                        .setTitle("Recent & quick links")
-                        .setBrowsable(true)
-                        .setOnClickListener(() -> getScreenManager().push(
-                                new InputScreen(c, browser, InputScreen.MODE_URL)))
-                        .build())
-                .addItem(new Row.Builder()
-                        .setTitle("Forward")
-                        .setOnClickListener(() -> { browser.forward(); getScreenManager().pop(); })
-                        .build())
-                .addItem(new Row.Builder()
-                        .setTitle("Home")
-                        .addText(Prefs.home(c))
-                        .setOnClickListener(() -> {
-                            browser.load(Prefs.home(c));
-                            getScreenManager().pop();
-                        })
                         .build())
                 .addItem(new Row.Builder()
                         .setTitle("Desktop site")

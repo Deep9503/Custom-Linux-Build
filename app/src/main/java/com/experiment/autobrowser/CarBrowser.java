@@ -68,6 +68,7 @@ public class CarBrowser implements SurfaceCallback {
     private int current;
     private CarKeyboard keyboard;
     private VideoBar videoBar;
+    private android.view.View loadingLine;  // thin progress line at the top while loading
     private android.view.View fullscreenView;               // video in fullscreen, if any
     private WebChromeClient.CustomViewCallback fullscreenCallback;
     private int surfaceW, surfaceH;
@@ -140,6 +141,14 @@ public class CarBrowser implements SurfaceCallback {
                 @Override
                 public void onSeekTo(float fraction) { videoCommand("to", fraction); }
             });
+            loadingLine = new android.view.View(presentation.getContext());
+            loadingLine.setBackgroundColor(0xFF8AB4F8);
+            loadingLine.setPivotX(0);
+            loadingLine.setVisibility(android.view.View.GONE);
+            container.addView(loadingLine, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    Math.round(3 * presentation.getContext().getResources().getDisplayMetrics().density),
+                    Gravity.TOP));
             container.addView(videoBar, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
                     Gravity.BOTTOM));
@@ -177,14 +186,25 @@ public class CarBrowser implements SurfaceCallback {
         releaseDisplay();
     }
 
-    /** Keep page content out from under the host's buttons. */
+    /**
+     * The page fills the whole screen, edge to edge, with Android Auto's buttons floating
+     * over it (like Maps). Only our own controls - keyboard and video bar - are kept inside
+     * the area the car's buttons never cover, so every tap on them reaches us.
+     */
     private void applyVisibleArea() {
         Rect a = stableArea != null && !stableArea.isEmpty() ? stableArea : visibleArea;
         if (container == null || a == null || a.isEmpty()) return;
-        int l = a.left, t = a.top, r = Math.max(0, surfaceW - a.right), b = Math.max(0, surfaceH - a.bottom);
-        if (container.getPaddingLeft() == l && container.getPaddingTop() == t
-                && container.getPaddingRight() == r && container.getPaddingBottom() == b) return;
-        container.setPadding(l, t, r, b);
+        int l = a.left, r = Math.max(0, surfaceW - a.right), b = Math.max(0, surfaceH - a.bottom);
+        inset(keyboard, l, r, b);
+        inset(videoBar, l, r, b);
+    }
+
+    private static void inset(android.view.View v, int l, int r, int b) {
+        if (v == null) return;
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) v.getLayoutParams();
+        if (lp.leftMargin == l && lp.rightMargin == r && lp.bottomMargin == b) return;
+        lp.setMargins(l, 0, r, b);
+        v.setLayoutParams(lp);
     }
 
     public void release() {
@@ -215,6 +235,7 @@ public class CarBrowser implements SurfaceCallback {
         container = null;
         keyboard = null;
         videoBar = null;
+        loadingLine = null;
     }
 
     // ---------------------------------------------------------------- input from the car
@@ -364,6 +385,13 @@ public class CarBrowser implements SurfaceCallback {
                 resultMsg.sendToTarget();
                 switchTo(tabs.size() - 1);
                 return true;
+            }
+
+            @Override
+            public void onProgressChanged(WebView view, int progress) {
+                if (view != web || loadingLine == null) return;
+                loadingLine.setVisibility(progress >= 100 ? android.view.View.GONE : android.view.View.VISIBLE);
+                loadingLine.setScaleX(Math.max(0.05f, progress / 100f));
             }
 
             @Override

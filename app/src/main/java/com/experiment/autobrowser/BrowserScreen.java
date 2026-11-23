@@ -30,10 +30,13 @@ public class BrowserScreen extends Screen {
     @NonNull
     @Override
     public Template onGetTemplate() {
+        // Kept deliberately short so the page gets the screen: 4 buttons on one side,
+        // 3 on the other. Reload / forward / home live in the menu.
         ActionStrip actions = new ActionStrip.Builder()
                 .addAction(icon(R.drawable.ic_search, browser::showAddressKeyboard))
                 .addAction(icon(R.drawable.ic_back, browser::back))
-                .addAction(icon(R.drawable.ic_refresh, browser::reload))
+                .addAction(icon(R.drawable.ic_tabs, () ->
+                        getScreenManager().push(new TabsScreen(getCarContext(), browser))))
                 .addAction(icon(R.drawable.ic_menu, () ->
                         getScreenManager().push(new MenuScreen(getCarContext(), browser))))
                 .build();
@@ -43,8 +46,6 @@ public class BrowserScreen extends Screen {
                 .addAction(Action.PAN)
                 .addAction(icon(R.drawable.ic_up, browser::pageUp))
                 .addAction(icon(R.drawable.ic_down, browser::pageDown))
-                .addAction(icon(R.drawable.ic_tabs, () ->
-                        getScreenManager().push(new TabsScreen(getCarContext(), browser))))
                 .build();
 
         return new NavigationTemplate.Builder()
