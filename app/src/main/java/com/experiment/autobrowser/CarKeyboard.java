@@ -76,6 +76,7 @@ class CarKeyboard extends LinearLayout {
     }
 
     void open(int mode, String initial, String hint) {
+        if (isOpen() && this.mode == mode && mode == MODE_PAGE) return; // keep what's typed
         this.mode = mode;
         this.hint = hint == null ? "" : hint;
         buf.setLength(0);
@@ -87,6 +88,11 @@ class CarKeyboard extends LinearLayout {
     }
 
     boolean isOpen() { return getVisibility() == VISIBLE; }
+
+    /** True if (x, y) in the parent's coordinates falls on the keyboard. */
+    boolean contains(float x, float y) {
+        return isOpen() && x >= getLeft() && x < getRight() && y >= getTop() && y < getBottom();
+    }
 
     private void close() {
         setVisibility(GONE);
@@ -180,7 +186,12 @@ class CarKeyboard extends LinearLayout {
         bg.setColor(color == 0 ? 0xFF3C4043 : color);
         bg.setCornerRadius(dp(6));
         t.setBackground(bg);
-        t.setOnClickListener(v -> action.run());
+        t.setOnClickListener(v -> {
+            // Flash the key so the driver can see which one registered.
+            bg.setColor(0xFF8AB4F8);
+            v.postDelayed(() -> bg.setColor(color == 0 ? 0xFF3C4043 : color), 150);
+            action.run();
+        });
         return t;
     }
 

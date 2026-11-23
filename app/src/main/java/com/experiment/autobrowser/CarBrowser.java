@@ -49,6 +49,8 @@ public class CarBrowser implements SurfaceCallback {
     private CarKeyboard keyboard;
     private int surfaceW, surfaceH;
     private Rect visibleArea;
+    private Rect stableArea;
+    private float lastTapX = -1, lastTapY = -1;
 
     private String currentUrl;
     private String currentTitle = "";
@@ -136,15 +138,21 @@ public class CarBrowser implements SurfaceCallback {
         }
     }
 
+    /**
+     * Android Auto changes the "visible" area every time its buttons show or hide (on each
+     * touch). Following it made the page and keyboard jump under the user's finger, so we
+     * lay out against the "stable" area, which never changes while the app is open.
+     */
     @Override
     public void onVisibleAreaChanged(@NonNull Rect area) {
         visibleArea = new Rect(area);
-        applyVisibleArea();
+        if (stableArea == null) applyVisibleArea();
     }
 
     @Override
     public void onStableAreaChanged(@NonNull Rect area) {
-        if (visibleArea == null) onVisibleAreaChanged(area);
+        stableArea = new Rect(area);
+        applyVisibleArea();
     }
 
     @Override
@@ -154,10 +162,12 @@ public class CarBrowser implements SurfaceCallback {
 
     /** Keep page content out from under the host's buttons. */
     private void applyVisibleArea() {
-        if (container == null || visibleArea == null || visibleArea.isEmpty()) return;
-        container.setPadding(visibleArea.left, visibleArea.top,
-                Math.max(0, surfaceW - visibleArea.right),
-                Math.max(0, surfaceH - visibleArea.bottom));
+        Rect a = stableArea != null && !stableArea.isEmpty() ? stableArea : visibleArea;
+        if (container == null || a == null || a.isEmpty()) return;
+        int l = a.left, t = a.top, r = Math.max(0, surfaceW - a.right), b = Math.max(0, surfaceH - a.bottom);
+        if (container.getPaddingLeft() == l && container.getPaddingTop() == t
+                && container.getPaddingRight() == r && container.getPaddingBottom() == b) return;
+        container.setPadding(l, t, r, b);
     }
 
     public void release() {
@@ -191,14 +201,21 @@ public class CarBrowser implements SurfaceCallback {
         // Surface coordinates == container coordinates, so the tap reaches the
         // on-screen keyboard if it's open, otherwise the web page underneath.
         long t = SystemClock.uptimeMillis();
+        // Some head units report one press twice; drop an identical tap within 90 ms.
+        if (t - lastTap < 90 && Math.abs(x - lastTapX) < 8 && Math.abs(y - lastTapY) < 8) return;
         lastTap = t;
+        lastTapX = x;
+        lastTapY = y;
+        if (keyboard != null && keyboard.isOpen() && !keyboard.contains(x, y)) {
+            return; // while typing, stray taps on the page are ignored (close with ✕)
+        }
         tap(container, t, MotionEvent.ACTION_DOWN, x, y);
         tap(container, t, MotionEvent.ACTION_UP, x, y);
     }
 
     @Override
     public void onScroll(float distanceX, float distanceY) {
-        if (web == null) return;
+        if (web == null || (keyboard != null && keyboard.isOpen())) return;
         // Simulate a finger drag so inner scrolling containers work too.
         float cx = web.getWidth() / 2f, cy = web.getHeight() / 2f;
         long t = SystemClock.uptimeMillis();
@@ -213,7 +230,7 @@ public class CarBrowser implements SurfaceCallback {
 
     @Override
     public void onFling(float velocityX, float velocityY) {
-        if (web != null) web.flingScroll((int) -velocityX, (int) -velocityY);
+        if (web != null && (keyboard == null || !keyboard.isOpen())) web.flingScroll((int) -velocityX, (int) -velocityY);
     }
 
     @Override
