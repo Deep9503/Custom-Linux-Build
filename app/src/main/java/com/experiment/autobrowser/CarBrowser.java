@@ -67,6 +67,8 @@ public class CarBrowser implements SurfaceCallback {
     private final List<Tab> tabs = new ArrayList<>();
     private int current;
     private CarKeyboard keyboard;
+    private android.view.View fullscreenView;               // video in fullscreen, if any
+    private WebChromeClient.CustomViewCallback fullscreenCallback;
     private int surfaceW, surfaceH;
     private Rect visibleArea;
     private Rect stableArea;
@@ -185,6 +187,8 @@ public class CarBrowser implements SurfaceCallback {
             }
         }
         web = null;
+        fullscreenView = null;
+        fullscreenCallback = null;
         if (presentation != null) {
             presentation.dismiss();
             presentation = null;
@@ -221,13 +225,13 @@ public class CarBrowser implements SurfaceCallback {
     public void onScroll(float distanceX, float distanceY) {
         // Scroll the page directly (like a mouse wheel) instead of faking finger drags,
         // which sites like YouTube mistook for taps or pull-to-refresh.
-        if (web == null || (keyboard != null && keyboard.isOpen())) return;
+        if (web == null || fullscreenView != null || (keyboard != null && keyboard.isOpen())) return;
         web.evaluateJavascript(WebSetup.scrollJs(distanceX, distanceY, WebSetup.SCROLL_PIXELS), null);
     }
 
     @Override
     public void onFling(float velocityX, float velocityY) {
-        if (web == null || (keyboard != null && keyboard.isOpen())) return;
+        if (web == null || fullscreenView != null || (keyboard != null && keyboard.isOpen())) return;
         web.evaluateJavascript(WebSetup.scrollJs(-velocityX * 0.3f, -velocityY * 0.3f,
                 WebSetup.SCROLL_SMOOTH), null);
     }
@@ -262,6 +266,7 @@ public class CarBrowser implements SurfaceCallback {
     /** Shows tab {@code i} on the car screen, creating its WebView if needed. */
     public void switchTo(int i) {
         if (i < 0 || i >= tabs.size()) return;
+        exitFullscreen();
         current = i;
         Tab t = tabs.get(i);
         if (container != null) {
@@ -344,6 +349,26 @@ public class CarBrowser implements SurfaceCallback {
             }
 
             @Override
+            public void onShowCustomView(android.view.View view, CustomViewCallback callback) {
+                // A video asked to go fullscreen: show its player over the whole page.
+                if (fullscreenView != null || container == null) {
+                    callback.onCustomViewHidden();
+                    return;
+                }
+                fullscreenView = view;
+                fullscreenCallback = callback;
+                view.setBackgroundColor(Color.BLACK);
+                if (keyboard != null) keyboard.setVisibility(android.view.View.GONE);
+                container.addView(view, new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            }
+
+            @Override
+            public void onHideCustomView() {
+                exitFullscreen();
+            }
+
+            @Override
             public void onCloseWindow(WebView window) {
                 for (int i = 0; i < tabs.size(); i++) {
                     if (tabs.get(i).view == window) { closeTab(i); break; }
@@ -353,7 +378,22 @@ public class CarBrowser implements SurfaceCallback {
         return v;
     }
 
-    public void back() { if (web != null && web.canGoBack()) web.goBack(); }
+    public void back() {
+        if (fullscreenView != null) { exitFullscreen(); return; }
+        if (web != null && web.canGoBack()) web.goBack();
+    }
+
+    public boolean isFullscreen() { return fullscreenView != null; }
+
+    /** Leave fullscreen video (also called when the page itself exits fullscreen). */
+    public void exitFullscreen() {
+        if (fullscreenView == null) return;
+        if (container != null) container.removeView(fullscreenView);
+        fullscreenView = null;
+        WebChromeClient.CustomViewCallback cb = fullscreenCallback;
+        fullscreenCallback = null;
+        if (cb != null) cb.onCustomViewHidden();
+    }
     public void forward() { if (web != null && web.canGoForward()) web.goForward(); }
     public void reload() { if (web != null) web.reload(); }
     public void pageUp() {

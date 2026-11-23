@@ -10,7 +10,12 @@ import androidx.car.app.model.CarIcon;
 import androidx.car.app.model.OnClickListener;
 import androidx.car.app.model.Template;
 import androidx.car.app.navigation.model.NavigationTemplate;
+import androidx.core.content.ContextCompat;
 import androidx.core.graphics.drawable.IconCompat;
+
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.drawable.Drawable;
 
 /** Main car screen: the web page fills the display, with browser buttons on the side. */
 public class BrowserScreen extends Screen {
@@ -49,9 +54,23 @@ public class BrowserScreen extends Screen {
                 .build();
     }
 
+    /**
+     * Icons are sent as pictures rather than resource IDs: Android Auto caches icons by
+     * resource ID, so after an app update the car could show old icons on the wrong buttons.
+     */
+    private Bitmap bitmap(@DrawableRes int res) {
+        Drawable d = ContextCompat.getDrawable(getCarContext(), res);
+        Bitmap b = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888);
+        if (d != null) {
+            d.setBounds(0, 0, 96, 96);
+            d.draw(new Canvas(b));
+        }
+        return b;
+    }
+
     private Action icon(@DrawableRes int res, OnClickListener onClick) {
         return new Action.Builder()
-                .setIcon(new CarIcon.Builder(IconCompat.createWithResource(getCarContext(), res)).build())
+                .setIcon(new CarIcon.Builder(IconCompat.createWithBitmap(bitmap(res))).build())
                 .setOnClickListener(onClick)
                 .build();
     }

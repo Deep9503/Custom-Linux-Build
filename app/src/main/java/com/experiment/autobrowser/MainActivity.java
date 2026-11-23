@@ -28,6 +28,8 @@ public class MainActivity extends AppCompatActivity {
     private EditText address;
     private ProgressBar progress;
     private TextView blockedLabel;
+    private View fullscreenView;
+    private WebChromeClient.CustomViewCallback fullscreenCallback;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -146,6 +148,23 @@ public class MainActivity extends AppCompatActivity {
         }, null));
         web.setWebChromeClient(new WebChromeClient() {
             @Override
+            public void onShowCustomView(View view, CustomViewCallback callback) {
+                if (fullscreenView != null) { callback.onCustomViewHidden(); return; }
+                fullscreenView = view;
+                fullscreenCallback = callback;
+                view.setBackgroundColor(android.graphics.Color.BLACK);
+                ((android.view.ViewGroup) getWindow().getDecorView()).addView(view,
+                        new android.widget.FrameLayout.LayoutParams(-1, -1));
+                getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+            }
+
+            @Override
+            public void onHideCustomView() {
+                exitFullscreen();
+            }
+
+            @Override
             public void onProgressChanged(WebView v, int p) {
                 progress.setProgress(p);
                 progress.setVisibility(p >= 100 ? View.INVISIBLE : View.VISIBLE);
@@ -171,6 +190,17 @@ public class MainActivity extends AppCompatActivity {
         web.requestFocus();
         InputMethodManager imm = getSystemService(InputMethodManager.class);
         imm.hideSoftInputFromWindow(address.getWindowToken(), 0);
+    }
+
+    @SuppressWarnings("deprecation")
+    private void exitFullscreen() {
+        if (fullscreenView == null) return;
+        ((android.view.ViewGroup) getWindow().getDecorView()).removeView(fullscreenView);
+        fullscreenView = null;
+        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
+        WebChromeClient.CustomViewCallback cb = fullscreenCallback;
+        fullscreenCallback = null;
+        if (cb != null) cb.onCustomViewHidden();
     }
 
     private void refreshBlocked() {
@@ -213,7 +243,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     @SuppressWarnings("deprecation")
     public void onBackPressed() {
-        if (web.canGoBack()) web.goBack();
+        if (fullscreenView != null) exitFullscreen();
+        else if (web.canGoBack()) web.goBack();
         else super.onBackPressed();
     }
 }
