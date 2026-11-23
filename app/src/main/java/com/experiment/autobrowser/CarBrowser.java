@@ -67,6 +67,7 @@ public class CarBrowser implements SurfaceCallback {
     private final List<Tab> tabs = new ArrayList<>();
     private int current;
     private CarKeyboard keyboard;
+    private VideoBar videoBar;
     private android.view.View fullscreenView;               // video in fullscreen, if any
     private WebChromeClient.CustomViewCallback fullscreenCallback;
     private int surfaceW, surfaceH;
@@ -128,6 +129,20 @@ public class CarBrowser implements SurfaceCallback {
                 public void onClose() { }
             });
             keyboard.setVisibility(android.view.View.GONE);
+
+            videoBar = new VideoBar(presentation.getContext(), new VideoBar.Listener() {
+                @Override
+                public void onToggle() { videoCommand("toggle", 0); }
+
+                @Override
+                public void onSeekBy(int seconds) { videoCommand("seek", seconds); }
+
+                @Override
+                public void onSeekTo(float fraction) { videoCommand("to", fraction); }
+            });
+            container.addView(videoBar, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                    Gravity.BOTTOM));
             container.addView(keyboard, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
                     Gravity.BOTTOM));
@@ -199,6 +214,7 @@ public class CarBrowser implements SurfaceCallback {
         }
         container = null;
         keyboard = null;
+        videoBar = null;
     }
 
     // ---------------------------------------------------------------- input from the car
@@ -267,6 +283,7 @@ public class CarBrowser implements SurfaceCallback {
     public void switchTo(int i) {
         if (i < 0 || i >= tabs.size()) return;
         exitFullscreen();
+        if (videoBar != null) videoBar.reset();
         current = i;
         Tab t = tabs.get(i);
         if (container != null) {
@@ -322,6 +339,7 @@ public class CarBrowser implements SurfaceCallback {
                 if (v == web && keyboard != null && keyboard.isOpen() && keyboard.isPageMode()) {
                     keyboard.setVisibility(android.view.View.GONE);
                 }
+                if (v == web && videoBar != null) videoBar.reset();
             }
 
             @Override
@@ -331,8 +349,8 @@ public class CarBrowser implements SurfaceCallback {
                 saveTabs();
                 if (view == web && listener != null) listener.onPageChanged(tab.url, tab.title);
             }
-        }, WebSetup.FOCUS_WATCH_JS));
-        v.addJavascriptInterface(new KeysBridge(), WebSetup.KEYS_BRIDGE);
+        }, WebSetup.FOCUS_WATCH_JS + WebSetup.VIDEO_WATCH_JS));
+        v.addJavascriptInterface(new KeysBridge(v), WebSetup.KEYS_BRIDGE);
         v.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture,
@@ -361,6 +379,12 @@ public class CarBrowser implements SurfaceCallback {
                 if (keyboard != null) keyboard.setVisibility(android.view.View.GONE);
                 container.addView(view, new FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+                // Keep our video controls (and keyboard) above the fullscreen player.
+                if (videoBar != null) {
+                    videoBar.forceShow();
+                    videoBar.bringToFront();
+                }
+                if (keyboard != null) keyboard.bringToFront();
             }
 
             @Override
@@ -425,11 +449,27 @@ public class CarBrowser implements SurfaceCallback {
         }
     }
 
-    /** Called from page JavaScript when a text field gets focus. */
+    private void videoCommand(String cmd, float arg) {
+        if (web != null) web.evaluateJavascript(WebSetup.videoCommandJs(cmd, arg), null);
+    }
+
+    /** Called from page JavaScript: text-field focus and video state. */
     private class KeysBridge {
+        private final WebView owner;
+
+        KeysBridge(WebView owner) { this.owner = owner; }
+
+        @JavascriptInterface
+        public void onVideo(double t, double duration, boolean paused) {
+            main.post(() -> {
+                if (owner == web && videoBar != null) videoBar.update(t, duration, paused);
+            });
+        }
+
         @JavascriptInterface
         public void onFocus(String value, String type, String label) {
             main.post(() -> {
+                if (owner != web) return;
                 // Only react to fields the user tapped, not ones a page focuses by itself.
                 if (keyboard == null || SystemClock.uptimeMillis() - lastTap > 2000) return;
                 String hint = !label.isEmpty() ? label
