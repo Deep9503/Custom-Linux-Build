@@ -7,6 +7,11 @@ on:
 permissions:
   contents: write
 
+# Only one build at a time; a newer push cancels an older running build.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -47,6 +52,7 @@ jobs:
         with:
           name: AutoBrowser-apk
           path: AutoBrowser.apk
+          retention-days: 1  # the APK is kept in Releases anyway
 
       - name: Publish as a release (easy phone download)
         uses: softprops/action-gh-release@v2
