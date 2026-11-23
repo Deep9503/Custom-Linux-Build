@@ -1,0 +1,173 @@
+package com.experiment.autobrowser;
+
+import android.graphics.Bitmap;
+import android.os.Bundle;
+import android.view.Gravity;
+import android.view.KeyEvent;
+import android.view.View;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
+import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
+import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
+import android.widget.Spinner;
+
+import androidx.appcompat.app.AppCompatActivity;
+
+/** Phone UI: the same browser and settings, for testing without a car. */
+public class MainActivity extends AppCompatActivity {
+
+    private WebView web;
+    private EditText address;
+    private ProgressBar progress;
+
+    @Override
+    protected void onCreate(Bundle state) {
+        super.onCreate(state);
+        int pad = dp(6);
+
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setFitsSystemWindows(true);
+
+        // Row 1: address / search box + Go
+        LinearLayout bar = new LinearLayout(this);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setPadding(pad, pad, pad, 0);
+        address = new EditText(this);
+        address.setSingleLine(true);
+        address.setHint("Search or type URL");
+        address.setImeOptions(EditorInfo.IME_ACTION_GO);
+        address.setSelectAllOnFocus(true);
+        address.setOnEditorActionListener((v, id, ev) -> {
+            boolean enter = ev != null && ev.getKeyCode() == KeyEvent.KEYCODE_ENTER
+                    && ev.getAction() == KeyEvent.ACTION_DOWN;
+            if (id == EditorInfo.IME_ACTION_GO || enter) { go(); return true; }
+            return false;
+        });
+        Button goBtn = new Button(this);
+        goBtn.setText("Go");
+        goBtn.setOnClickListener(v -> go());
+        bar.addView(address, new LinearLayout.LayoutParams(0, -2, 1f));
+        bar.addView(goBtn);
+
+        // Row 2: search engine, desktop mode, nav buttons
+        LinearLayout tools = new LinearLayout(this);
+        tools.setGravity(Gravity.CENTER_VERTICAL);
+        tools.setPadding(pad, 0, pad, 0);
+        Spinner engine = new Spinner(this);
+        String[] names = new String[Prefs.ENGINES.length];
+        for (int i = 0; i < names.length; i++) names[i] = Prefs.ENGINES[i][0];
+        ArrayAdapter<String> ad = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item, names);
+        ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        engine.setAdapter(ad);
+        engine.setSelection(Prefs.engineIndex(this));
+        engine.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> p, View v, int pos, long id) {
+                Prefs.setEngineIndex(MainActivity.this, pos);
+            }
+            @Override public void onNothingSelected(AdapterView<?> p) { }
+        });
+        CheckBox desktop = new CheckBox(this);
+        desktop.setText("Desktop");
+        desktop.setChecked(Prefs.desktopMode(this));
+        desktop.setOnCheckedChangeListener((b, on) -> {
+            Prefs.setDesktopMode(this, on);
+            WebSetup.applyDesktopMode(this, web);
+            web.reload();
+        });
+        Button back = small("◀", v -> { if (web.canGoBack()) web.goBack(); });
+        Button fwd = small("▶", v -> { if (web.canGoForward()) web.goForward(); });
+        Button reload = small("⟳", v -> web.reload());
+        Button home = small("⌂", v -> web.loadUrl(Prefs.home(this)));
+        Button setHome = small("★", v -> {
+            Prefs.setHome(this, web.getUrl());
+            android.widget.Toast.makeText(this, "Home page saved", android.widget.Toast.LENGTH_SHORT).show();
+        });
+        tools.addView(engine, new LinearLayout.LayoutParams(0, -2, 1f));
+        tools.addView(desktop);
+        tools.addView(back);
+        tools.addView(fwd);
+        tools.addView(reload);
+        tools.addView(home);
+        tools.addView(setHome);
+
+        progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        progress.setMax(100);
+
+        web = new WebView(this);
+        WebSetup.configure(this, web);
+        web.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {
+                String s = r.getUrl().getScheme();
+                return s == null || !(s.equals("http") || s.equals("https"));
+            }
+            @Override
+            public void onPageStarted(WebView v, String url, Bitmap icon) {
+                if (!address.hasFocus()) address.setText(url);
+            }
+        });
+        web.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onProgressChanged(WebView v, int p) {
+                progress.setProgress(p);
+                progress.setVisibility(p >= 100 ? View.INVISIBLE : View.VISIBLE);
+            }
+        });
+
+        root.addView(bar);
+        root.addView(tools);
+        root.addView(progress, new LinearLayout.LayoutParams(-1, dp(4)));
+        root.addView(web, new LinearLayout.LayoutParams(-1, 0, 1f));
+        setContentView(root);
+
+        if (state != null) web.restoreState(state);
+        else web.loadUrl(Prefs.home(this));
+    }
+
+    private void go() {
+        String text = address.getText().toString();
+        if (!text.trim().isEmpty()) Prefs.addRecent(this, text.trim());
+        web.loadUrl(Prefs.resolve(this, text));
+        address.clearFocus();
+        web.requestFocus();
+        InputMethodManager imm = getSystemService(InputMethodManager.class);
+        imm.hideSoftInputFromWindow(address.getWindowToken(), 0);
+    }
+
+    private Button small(String label, View.OnClickListener l) {
+        Button b = new Button(this, null, android.R.attr.buttonStyleSmall);
+        b.setText(label);
+        b.setMinWidth(dp(40));
+        b.setMinimumWidth(dp(40));
+        b.setOnClickListener(l);
+        return b;
+    }
+
+    private int dp(int v) {
+        return Math.round(v * getResources().getDisplayMetrics().density);
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle out) {
+        super.onSaveInstanceState(out);
+        web.saveState(out);
+    }
+
+    @Override
+    @SuppressWarnings("deprecation")
+    public void onBackPressed() {
+        if (web.canGoBack()) web.goBack();
+        else super.onBackPressed();
+    }
+}
