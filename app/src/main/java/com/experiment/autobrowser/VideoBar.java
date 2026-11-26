@@ -34,6 +34,7 @@ class VideoBar extends LinearLayout {
     private final TextView time;
     private final Timeline timeline;
     private boolean hiddenByUser;
+    private String videoId = "";
     private boolean paused = true;
 
     VideoBar(Context c, Listener listener) {
@@ -77,10 +78,15 @@ class VideoBar extends LinearLayout {
     }
 
     /** Called about once a second with the page's video state; t < 0 means no video. */
-    void update(double t, double duration, boolean isPaused) {
+    void update(double t, double duration, boolean isPaused, String id) {
         if (t < 0) {
             setVisibility(GONE);
             return;
+        }
+        // A different video started (e.g. next YouTube video): show the bar again.
+        if (id != null && !id.isEmpty() && !id.equals(videoId)) {
+            videoId = id;
+            hiddenByUser = false;
         }
         paused = isPaused;
         playPause.setImageResource(paused ? R.drawable.ic_play : R.drawable.ic_pause);

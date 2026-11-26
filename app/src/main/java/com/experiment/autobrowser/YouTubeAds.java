@@ -39,18 +39,29 @@ final class YouTubeAds {
             + "#player-ads,#masthead-ad,.ytp-ad-overlay-container,.ytp-ad-image-overlay,.ytp-ad-text-overlay,"
             + "ytm-promoted-sparkles-web-renderer,ytm-companion-ad-renderer,ytm-ad-slot-renderer,ad-slot-renderer,"
             + "ytm-promoted-video-renderer,ytm-in-feed-ad-layout-renderer,ytm-banner-promo-renderer,"
-            + "ytd-rich-item-renderer:has(ytd-ad-slot-renderer),ytm-rich-item-renderer:has(ad-slot-renderer)"
+            + "ytd-rich-item-renderer:has(ytd-ad-slot-renderer),ytm-rich-item-renderer:has(ad-slot-renderer),"
+            + "ytd-enforcement-message-view-model,tp-yt-paper-dialog:has(ytd-enforcement-message-view-model)"
             + "{display:none!important}';"
             + "(function add(){var r=document.documentElement;if(!r){setTimeout(add,50);return;}"
             + "var s=document.createElement('style');s.textContent=css;(document.head||r).appendChild(s);})();"
-            // 3. skip anything that still plays
-            + "var on=0,wasMuted=false;"
-            + "setInterval(function(){var v=document.querySelector('video');"
+            // 3. Skip anything that still plays. Only acts when YouTube's player shows a real ad
+            //    (ad-showing class AND an ad badge/countdown), never on the actual video.
+            + "var on=0,wasMuted=false,adSrc=null;"
+            + "function player(){return document.querySelector('#movie_player,.html5-video-player');}"
+            + "function adPlaying(p){if(!p||!/(^|\\s)ad-showing(\\s|$)/.test(p.className))return false;"
+            + "return !!p.querySelector('.ytp-ad-player-overlay,.ytp-ad-player-overlay-layout,"
+            + ".ytp-ad-preview-container,.ytp-ad-duration-remaining,.ytp-ad-simple-ad-badge,.ytp-ad-badge,"
+            + ".ytp-ad-text,.ytp-ad-skip-button-container,.ytp-skip-ad-button');}"
+            + "setInterval(function(){try{"
             + "var b=document.querySelector('.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.ytp-skip-ad-button,"
             + ".ytp-ad-skip-button-container button,.ytp-ad-overlay-close-button');if(b)b.click();"
-            + "var ad=document.querySelector('.ad-showing,.ad-interrupting');"
-            + "if(ad&&v){if(!on){on=1;wasMuted=v.muted;}v.muted=true;v.playbackRate=16;"
-            + "if(isFinite(v.duration)&&v.duration>0&&v.currentTime<v.duration-0.1)v.currentTime=v.duration-0.05;}"
-            + "else if(on&&v){on=0;v.muted=wasMuted;v.playbackRate=1;}},250);"
+            + "var p=player(),v=p?p.querySelector('video'):null;"
+            + "if(v&&adPlaying(p)){if(!on){on=1;wasMuted=v.muted;adSrc=v.currentSrc;}"
+            + "v.muted=true;v.playbackRate=16;"
+            // jump to the end only for a short clip that is still the same ad
+            + "if(v.currentSrc===adSrc&&isFinite(v.duration)&&v.duration>0&&v.duration<=180"
+            + "&&v.currentTime<v.duration-0.3)v.currentTime=v.duration-0.1;}"
+            + "else if(on){on=0;adSrc=null;if(v){v.muted=wasMuted;v.playbackRate=1;}}"
+            + "}catch(e){}},250);"
             + "})();";
 }

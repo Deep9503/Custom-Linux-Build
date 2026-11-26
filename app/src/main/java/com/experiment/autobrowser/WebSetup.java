@@ -89,28 +89,58 @@ final class WebSetup {
                     + "(t.getAttribute('type')||tag),t.getAttribute('placeholder')||t.getAttribute('aria-label')||'');"
                     + "},true);})();";
 
+    /**
+     * Finds the main video. On YouTube it uses YouTube's own player API (#movie_player), which
+     * YouTube respects; elsewhere the largest playing <video>. Small muted autoplay previews
+     * (e.g. in the YouTube feed) are ignored so the control bar doesn't pop up while browsing.
+     */
+    private static final String FIND_VIDEO_JS =
+            "function __abYt(){var p=document.getElementById('movie_player');"
+                    + "return(p&&typeof p.seekTo==='function'&&typeof p.getCurrentTime==='function'"
+                    + "&&typeof p.getDuration==='function'&&p.getDuration()>0)?p:null;}"
+                    + "function __abVideo(){var vs=document.querySelectorAll('video'),b=null,ba=-1,"
+                    + "screen=innerWidth*innerHeight;"
+                    + "for(var i=0;i<vs.length;i++){var v=vs[i];if(!(v.duration>0))continue;"
+                    + "var r=v.getBoundingClientRect(),a=Math.max(0,r.width)*Math.max(0,r.height);"
+                    + "if(a<1)continue;if(v.muted&&a<screen*0.25&&!document.fullscreenElement)continue;"
+                    + "if(!v.paused)a+=1e9;if(a>ba){ba=a;b=v;}}return b;}";
+
     /** Reports the main video's state to the car browser about once a second. */
     static final String VIDEO_WATCH_JS =
-            "(function(){if(window.__abVid)return;window.__abVid=1;"
-                    + "function best(){var vs=document.querySelectorAll('video'),b=null,ba=-1;"
-                    + "for(var i=0;i<vs.length;i++){var v=vs[i];if(!(v.duration>0))continue;"
-                    + "var r=v.getBoundingClientRect(),a=r.width*r.height;if(!v.paused)a+=1e9;"
-                    + "if(a>ba){ba=a;b=v;}}return b;}"
-                    + "window.__abBest=best;var had=false;"
-                    + "setInterval(function(){var k=window." + KEYS_BRIDGE + ";if(!k)return;var v=best();"
-                    + "if(v){had=true;k.onVideo(v.currentTime,isFinite(v.duration)?v.duration:0,v.paused);}"
-                    + "else if(had){had=false;k.onVideo(-1,0,true);}},1000);})();";
+            "(function(){if(window.__abVid)return;window.__abVid=1;" + FIND_VIDEO_JS
+                    + "window.__abYt=__abYt;window.__abVideo=__abVideo;var had=false;"
+                    + "setInterval(function(){try{var k=window." + KEYS_BRIDGE + ";if(!k)return;"
+                    + "var v=__abVideo(),y=v?__abYt():null;"
+                    // only trust the YouTube API when its player actually holds the main video
+                    + "if(y&&!(y.contains&&y.contains(v)))y=null;"
+                    + "if(v){had=true;"
+                    + "var t=y?y.getCurrentTime():v.currentTime,d=y?y.getDuration():(isFinite(v.duration)?v.duration:0),"
+                    + "paused=y?(y.getPlayerState()!==1&&y.getPlayerState()!==3):v.paused,"
+                    + "id=y&&y.getVideoData?(y.getVideoData().video_id||''):(v.currentSrc||'');"
+                    + "k.onVideo(t,d,paused,String(id));}"
+                    + "else if(had){had=false;k.onVideo(-1,0,true,'');}}catch(e){}},1000);})();";
 
     /** Play/pause, jump by seconds, or jump to a fraction of the main video. */
     static String videoCommandJs(String cmd, float arg) {
-        return "(function(c,a){var v=window.__abBest?window.__abBest():document.querySelector('video');"
-                + "if(!v)return;"
+        return "(function(c,a){var v=window.__abVideo?window.__abVideo():document.querySelector('video');"
+                + "var y=window.__abYt?window.__abYt():null;if(y&&v&&!(y.contains&&y.contains(v)))y=null;"
+                + "if(y){var d=y.getDuration(),t=y.getCurrentTime(),st=y.getPlayerState();"
+                + "if(c==='toggle'){if(st===1||st===3)y.pauseVideo();else y.playVideo();}"
+                + "else if(c==='seek'){y.seekTo(Math.max(0,Math.min(d-0.5,t+a)),true);}"
+                + "else if(c==='to'&&d>0){y.seekTo(d*a,true);}return 'yt';}"
+                + "if(!v)return 'none';"
                 + "if(c==='toggle'){if(v.paused){var p=v.play();if(p&&p.catch)p.catch(function(){});}else{v.pause();}}"
                 + "else if(c==='seek'){var e=isFinite(v.duration)?v.duration-0.5:1e9;"
                 + "v.currentTime=Math.max(0,Math.min(e,v.currentTime+a));}"
                 + "else if(c==='to'&&isFinite(v.duration)&&v.duration>0){v.currentTime=v.duration*a;}"
-                + "})(" + JSONObject.quote(cmd) + "," + arg + ")";
+                + "return 'video';})(" + JSONObject.quote(cmd) + "," + arg + ")";
     }
+
+    /** Pauses every video and audio element (used when leaving a tab). */
+    static final String PAUSE_ALL_JS =
+            "(function(){var y=document.getElementById('movie_player');"
+                    + "if(y&&typeof y.pauseVideo==='function'){try{y.pauseVideo();}catch(e){}}"
+                    + "document.querySelectorAll('video,audio').forEach(function(m){try{m.pause();}catch(e){}});})();";
 
     /** JS that puts text into the focused (or last focused) field and optionally submits it. */
     static String typeIntoFocusedFieldJs(String text, boolean submit) {

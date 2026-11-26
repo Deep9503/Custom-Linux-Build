@@ -305,6 +305,8 @@ public class CarBrowser implements SurfaceCallback {
         if (i < 0 || i >= tabs.size()) return;
         exitFullscreen();
         if (videoBar != null) videoBar.reset();
+        // Don't leave a video playing in the tab we're leaving.
+        if (web != null && i != current) web.evaluateJavascript(WebSetup.PAUSE_ALL_JS, null);
         current = i;
         Tab t = tabs.get(i);
         if (container != null) {
@@ -488,9 +490,9 @@ public class CarBrowser implements SurfaceCallback {
         KeysBridge(WebView owner) { this.owner = owner; }
 
         @JavascriptInterface
-        public void onVideo(double t, double duration, boolean paused) {
+        public void onVideo(double t, double duration, boolean paused, String videoId) {
             main.post(() -> {
-                if (owner == web && videoBar != null) videoBar.update(t, duration, paused);
+                if (owner == web && videoBar != null) videoBar.update(t, duration, paused, videoId);
             });
         }
 
